@@ -126,31 +126,31 @@ Understanding roles is **critical** for implementing SPS correctly.
 ### Role Definitions
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SPS ROLE DEFINITIONS                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
+┌────────────────────────────────────────────────────────────────────────┐
+│                         SPS ROLE DEFINITIONS                           │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
 │   ╔═══════════════════════════════════════════════════════════════╗    │
-│   ║                      SPS SERVER                                ║    │
+│   ║                      SPS SERVER                               ║    │
 │   ╠═══════════════════════════════════════════════════════════════╣    │
-│   ║  • Hosts the SPS GATT service                                  ║    │
-│   ║  • Advertises its presence ("I have SPS!")                     ║    │
-│   ║  • Waits for connections                                       ║    │
-│   ║  • Can be: u-blox module or any device with SPS service        ║    │
-│   ║  • Receives writes, sends notifications                        ║    │
+│   ║  • Hosts the SPS GATT service                                 ║    │
+│   ║  • Advertises its presence ("I have SPS!")                    ║    │
+│   ║  • Waits for connections                                      ║    │
+│   ║  • Can be: u-blox module or any device with SPS service       ║    │
+│   ║  • Receives writes, sends notifications                       ║    │
 │   ╚═══════════════════════════════════════════════════════════════╝    │
-│                                                                         │
+│                                                                        │
 │   ╔═══════════════════════════════════════════════════════════════╗    │
-│   ║                      SPS CLIENT                                ║    │
+│   ║                      SPS CLIENT                               ║    │
 │   ╠═══════════════════════════════════════════════════════════════╣    │
-│   ║  • Scans for SPS servers                                       ║    │
-│   ║  • Initiates the BLE connection                                ║    │
-│   ║  • Discovers the SPS service and characteristics               ║    │
-│   ║  • Can be: u-blox module*, mobile app, PC, embedded MCU        ║    │
-│   ║  • Writes to characteristics, receives notifications           ║    │
+│   ║  • Scans for SPS servers                                      ║    │
+│   ║  • Initiates the BLE connection                               ║    │
+│   ║  • Discovers the SPS service and characteristics              ║    │
+│   ║  • Can be: u-blox module*, mobile app, PC, embedded MCU       ║    │
+│   ║  • Writes to characteristics, receives notifications          ║    │
 │   ╚═══════════════════════════════════════════════════════════════╝    │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 > *Only modules with BLE Central capability can be SPS Clients.
@@ -274,10 +274,10 @@ The service contains two characteristics:
 ### System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SPS ARCHITECTURE                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
+┌────────────────────────────────────────────────────────────────────────┐
+│                         SPS ARCHITECTURE                               │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                        │
 │  ┌─────────────────────────┐         ┌─────────────────────────┐       │
 │  │      SPS CLIENT         │         │      SPS SERVER         │       │
 │  │    (Your Device)        │         │   (u-blox Module)       │       │
@@ -296,15 +296,15 @@ The service contains two characteristics:
 │  │           │             │         │           │             │       │
 │  │           ▼             │         │           ▼             │       │
 │  │  ┌───────────────────┐  │   BLE   │  ┌───────────────────┐  │       │
-│  │  │  GATT Client      │◄═╬════════╬═►│  GATT Server      │  │       │
+│  │  │  GATT Client      │◄═╬═════════╬═►│  GATT Server      │  │       │
 │  │  │  • Write FIFO     │  │         │  │  • FIFO Service   │  │       │
 │  │  │  • Write Credits  │  │         │  │  • Credits Service│  │       │
 │  │  │  • Handle Notify  │  │         │  │  • Send Notify    │  │       │
 │  │  └───────────────────┘  │         │  └───────────────────┘  │       │
 │  │                         │         │                         │       │
 │  └─────────────────────────┘         └─────────────────────────┘       │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow Diagram
@@ -323,18 +323,18 @@ The service contains two characteristics:
 │    └──────────┘                        └──────────┘                     │
 │                                                                         │
 │    ┌──────────┐                        ┌──────────┐                     │
-│    │ RX Data  │◄──── NOTIFY FIFO ─────│ TX Data  │                     │
+│    │ RX Data  │◄───── NOTIFY FIFO ─────│ TX Data  │                     │
 │    │ Buffer   │                        │ Buffer   │                     │
 │    └──────────┘                        └──────────┘                     │
 │                                                                         │
 │    ┌──────────┐                        ┌──────────┐                     │
-│    │TX Credits│◄── NOTIFY CREDITS ────│Grants    │                     │
-│    │ Counter  │   "You can send 10"   │Credits   │                     │
+│    │TX Credits│◄─── NOTIFY CREDITS ────│Grants    │                     │
+│    │ Counter  │    "You can send 10"   │Credits   │                     │
 │    └──────────┘                        └──────────┘                     │
 │                                                                         │
 │    ┌──────────┐                        ┌──────────┐                     │
-│    │Grants    │──── WRITE CREDITS ───►│TX Credits│                     │
-│    │Credits   │   "I can receive 5"   │ Counter  │                     │
+│    │Grants    │───── WRITE CREDITS ───►│TX Credits│                     │
+│    │Credits   │    "I can receive 5"   │ Counter  │                     │
 │    └──────────┘                        └──────────┘                     │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -358,9 +358,9 @@ Flow control is **essential** to understand. Without it, you will lose data.
 │                                                                         │
 │    ┌──────────┐                        ┌──────────┐                     │
 │    │ Sends    │                        │ Buffer   │                     │
-│    │ 100      │──────────────────────►│ Size: 10 │                     │
+│    │ 100      │───────────────────────►│ Size: 10 │                     │
 │    │ packets  │                        │          │                     │
-│    │ fast!    │                        │ ❌ OVERFLOW!                   │
+│    │ fast!    │                        │ ❌ OVERFLOW!                  │
 │    └──────────┘                        └──────────┘                     │
 │                                                                         │
 │    Result: 90 packets LOST                                              │
@@ -382,7 +382,7 @@ Flow control is **essential** to understand. Without it, you will lose data.
 │                                                                         │
 │    tx_credits: 0                       "I have buffer space"            │
 │         │                                        │                      │
-│         │◄────── NOTIFY Credits: 10 ────────────│                      │
+│         │◄─────── NOTIFY Credits: 10 ────────────│                      │
 │         │                                        │                      │
 │    tx_credits: 10                                                       │
 │                                                                         │
@@ -390,25 +390,25 @@ Flow control is **essential** to understand. Without it, you will lose data.
 │                                                                         │
 │    tx_credits: 10                      buffer[10]                       │
 │         │                                        │                      │
-│         │──────── WRITE Data ──────────────────►│ buffer[9]            │
+│         │───────── WRITE Data ──────────────────►│ buffer[9]            │
 │    tx_credits: 9                                 │                      │
-│         │──────── WRITE Data ──────────────────►│ buffer[8]            │
+│         │───────── WRITE Data ──────────────────►│ buffer[8]            │
 │    tx_credits: 8                                 │                      │
 │         │          ...continues...               │                      │
 │    tx_credits: 0                                 │ buffer[0] ← FULL     │
 │         │                                        │                      │
-│         │──────── WRITE Data ──────────────────►│ MUST WAIT!           │
+│         │───────── WRITE Data ──────────────────►│ MUST WAIT!           │
 │         ✗ CANNOT SEND (no credits)               │                      │
 │                                                                         │
 │    3. Server processes data, grants more credits                        │
 │                                                                         │
 │    tx_credits: 0                       "Processed some, have space"     │
 │         │                                        │                      │
-│         │◄────── NOTIFY Credits: 5 ─────────────│                      │
+│         │◄─────── NOTIFY Credits: 5 ─────────────│                      │
 │         │                                        │                      │
 │    tx_credits: 5                                                        │
 │         │                                        │                      │
-│         │──────── WRITE Data ──────────────────►│ ✓ OK                 │
+│         │───────── WRITE Data ──────────────────►│ ✓ OK                 │
 │    tx_credits: 4                                                        │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -501,9 +501,9 @@ The **Client Characteristic Configuration Descriptor (CCCD)** is a standard BLE 
 │   CLIENT                               SERVER                           │
 │      │                                    │                             │
 │      │   Write 0x0100 to FIFO CCCD        │                             │
-│      │──────────────────────────────────►│  "Notifications enabled"    │
+│      │───────────────────────────────────►│  "Notifications enabled"    │
 │      │                                    │                             │
-│      │◄──────────── NOTIFY ──────────────│  Now server can send data   │
+│      │◄──────────── NOTIFY ───────────────│  Now server can send data   │
 │      │                                    │                             │
 │                                                                         │
 │   CCCD Values:                                                          │
@@ -734,3 +734,4 @@ static const uint8_t SPS_CREDITS_UUID[] = {
 - [C Client Implementation](SPS_CLIENT_C.md)
 - [C Server Implementation](SPS_SERVER_C.md)
 - [u-blox Module Configuration](SPS_UBLOX_CONFIG.md)
+
