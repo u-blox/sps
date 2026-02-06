@@ -14,6 +14,16 @@ SPS is a proprietary u-blox protocol for wireless serial communication over Blue
 | **NORA-B26** | 6.0 | — | ✓ | ✓ | BLE-only, Central + Peripheral |
 | **NORA-B27** | 6.0 | — | ✓ | — | BLE-only, Peripheral only |
 
+Note that following older geneation u-blox module also support SPS but with an other AT command set:
+- ANNA-B1
+- ANNA-B41
+- NINA-B1
+- NINA-B2
+- NINA-B31
+- NINA-B41
+- NINA-W15
+- ODIN-W2
+
 ## Documentation Files
 
 | File | Description |
@@ -68,3 +78,4 @@ Credits:  2456e1b9-26e2-8f83-e744-f34f01e9d704  (flow control)
 | 1.2 | 2026-01-22 | Added NORA-B27 support, generalized module references |
 | 1.1 | 2026-01-21 | Added Serial Cable Replacement chapter |
 | 1.0 | 2026-01-20 | Initial comprehensive documentation |
+
