@@ -223,6 +223,15 @@ class SPSClient:
         """
         Connect to an SPS peripheral.
         
+        Follows the u-blox SPS Protocol Specification (UBX-16011192)
+        connection sequence for non-bonded flow-control mode:
+          1. Establish ACL link
+          2. Discover GATT characteristics (done by bleak)
+          3. Write Credits CCCD (enable notifications on Credits char)
+          4. Write FIFO CCCD (enable notifications on FIFO char)
+          5. Write Credits Value (grant initial credits to peripheral)
+          6. Wait for peripheral to notify Credits Value back
+        
         Args:
             address: Bluetooth address (e.g., "AA:BB:CC:DD:EE:FF")
             timeout: Connection timeout in seconds
@@ -236,24 +245,39 @@ class SPSClient:
         from bleak import BleakClient
         
         self.state = SPSState.CONNECTING
+        self._disconnected_event = asyncio.Event()
+        
+        def _on_disconnect(client):
+            self._disconnected_event.set()
+            self.state = SPSState.DISCONNECTED
         
         try:
-            self._client = BleakClient(address)
+            self._client = BleakClient(address, disconnected_callback=_on_disconnect)
             await self._client.connect(timeout=timeout)
             self.state = SPSState.CONNECTED
             
-            # Enable notifications
-            await self._client.start_notify(SPS_FIFO_UUID, self._handle_fifo_notification)
+            # Per SPS spec: enable Credits CCCD first, then FIFO CCCD
             await self._client.start_notify(SPS_CREDITS_UUID, self._handle_credits_notification)
+            await self._client.start_notify(SPS_FIFO_UUID, self._handle_fifo_notification)
             
-            # Wait for initial credits
+            # Grant initial credits to peripheral (tells it we can receive data)
+            await self._grant_credits(INITIAL_CREDITS)
+            
+            # Wait for peripheral to send us credits (so we can send data)
             try:
                 await asyncio.wait_for(self._credits_event.wait(), timeout=3.0)
             except asyncio.TimeoutError:
                 pass  # Some peripherals don't send initial credits
             
+            # Check if connection survived the handshake
+            if self._disconnected_event.is_set() or not self._client.is_connected:
+                self.state = SPSState.DISCONNECTED
+                raise ConnectionError("BLE link dropped during SPS handshake")
+            
             return True
             
+        except ConnectionError:
+            raise
         except Exception as e:
             self.state = SPSState.DISCONNECTED
             raise ConnectionError(f"Failed to connect: {e}")
