@@ -2,6 +2,14 @@
 
 This document describes the core **Serial Port Service (SPS)** protocol for wireless serial communication over Bluetooth Low Energy (BLE).
 
+> **Source of truth:** the authoritative specification is the u-blox document
+> **UBX-16011192** — *u-connectXpress Low Energy Serial Port Service Protocol
+> Specification*
+> ([PDF](https://content.u-blox.com/sites/default/files/u-connectXpress-LowEnergySerialPortService_ProtocolSpec_UBX-16011192.pdf)).
+> This README is a developer-friendly companion; if anything here disagrees
+> with the PDF, the PDF wins. In particular, Figure 5 of UBX-16011192 mandates
+> the CCCD enable order: **Credits CCCD first, FIFO CCCD second**.
+
 **Related Documentation:**
 - [Python Client Implementation](SPS_CLIENT_PYTHON.md)
 - [Python Server Implementation](SPS_SERVER_PYTHON.md)
@@ -475,6 +483,14 @@ On RECEIVE data:
 | **With Flow Control** (Default) | Credit-based, reliable | Most applications—guaranteed delivery |
 | **Without Flow Control** | No credits, best effort | Only when occasional data loss is acceptable |
 
+> **Important:** Both peers must agree on the flow-control mode — there is no
+> auto-negotiation. On u-blox modules this is configured per server with
+> `AT+UDSC` parameter 4 (`1` = flow control on, `0` = off). If one side has
+> flow control on and the other has it off, the link will either stall (the
+> "off" side never grants credits) or get torn down by the module with a
+> `+UESPSD` URC. When flow control is disabled, the Credits characteristic
+> CCCD must NOT be written — only enable FIFO notifications.
+
 ---
 
 ## Data Transfer
@@ -573,11 +589,15 @@ This section shows **exactly what the CLIENT needs to do** to establish an SPS s
 │  Find FIFO (d703) and Credits (d704) characteristics                    │
 │  Save their handles for later use                                       │
 │                                                                         │
-│  STEP 5: ENABLE NOTIFICATIONS (CRITICAL!)                               │
+│  STEP 5: ENABLE NOTIFICATIONS (CRITICAL — ORDER MATTERS!)               │
 │  ────────────────────────────────────────────────────────────────────── │
-│  Write 0x0100 to FIFO CCCD                                              │
-│  Write 0x0100 to Credits CCCD                                           │
+│  Write 0x0100 to Credits CCCD   ← FIRST (per UBX-16011192 Figure 5)     │
+│  Write 0x0100 to FIFO CCCD      ← SECOND                                │
 │  Without this, you will NOT receive any data!                           │
+│  If you reverse the order, the server may send the initial Credits      │
+│  notification before you are subscribed and the link will appear to be  │
+│  connected but stuck (no data, no credits). NORA-W36 will then drop     │
+│  the link with a +UESPSD URC.                                           │
 │                                                                         │
 │  STEP 6: WAIT FOR INITIAL CREDITS                                       │
 │  ────────────────────────────────────────────────────────────────────── │
@@ -601,7 +621,7 @@ This section shows **exactly what the CLIENT needs to do** to establish an SPS s
 | 2 | Connect | Standard BLE connection |
 | 3 | Discover services | Find SPS Service |
 | 4 | Discover characteristics | Find FIFO and Credits |
-| 5 | Enable notifications | Write 0x0100 to both CCCDs |
+| 5 | Enable notifications | Write 0x0100 to **Credits CCCD first**, then FIFO CCCD (per UBX-16011192 Figure 5) |
 | 6 | Wait for credits | Server sends initial credits |
 | 7 | Exchange data | Use flow control! |
 
@@ -630,10 +650,13 @@ This section shows **exactly what the CLIENT needs to do** to establish an SPS s
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | No data received | CCCD not enabled | **CLIENT must** write 0x0100 to FIFO CCCD |
+| Connected but no data + no credits | FIFO CCCD enabled before Credits CCCD | Enable **Credits CCCD first**, then FIFO CCCD (UBX-16011192 §Figure 5) |
+| Link drops shortly after connect (+UESPSD on module) | Handshake rejected — wrong CCCD order, missing initial credits, or flow-control mismatch | Verify CCCD order, grant initial credits within ~1 s, check `AT+UDSC` parameter 4 matches both peers |
 | Data loss | Flow control ignored | Track credits, wait when zero |
 | "No credits" error | Sent before server ready | Wait for initial credits notification |
 | Slow throughput | Low MTU | Negotiate higher MTU |
 | Connection drops | Supervision timeout | Keep connection active, check RSSI |
+| RX byte counter rises but app sees nothing | Higher-layer test/echo loop is consuming the FIFO before your app handler | Stop throughput test / disable echo before reading from the link |
 
 ---
 
@@ -663,7 +686,10 @@ This section shows **exactly what the CLIENT needs to do** to establish an SPS s
 │  PROBLEM: "I can connect but never receive any data"                    │
 │  ─────────────────────────────────────────────────────────────────────  │
 │  CAUSE: You forgot to enable notifications (CCCD)                       │
-│  FIX: Write 0x0100 to both FIFO CCCD and Credits CCCD                   │
+│  FIX: Enable Credits CCCD FIRST, then FIFO CCCD (write 0x0100 to each)  │
+│       Order matters — see UBX-16011192 Figure 5. Reversing the order    │
+│       makes the link look connected but stuck with zero credits, and    │
+│       NORA-W36 firmware will eventually drop it with a +UESPSD URC.     │
 │       This is step 5 in the connection procedure!                       │
 │                                                                         │
 │  ─────────────────────────────────────────────────────────────────────  │

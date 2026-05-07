@@ -272,23 +272,26 @@ void sps_grant_credits(sps_client_t *ctx, uint8_t count) {
  * Call this after service discovery is complete.
  *
  * This is CRITICAL - without this, you won't receive any data from the server!
+ *
+ * ORDER MATTERS: per UBX-16011192 Figure 5, the Credits CCCD must be
+ * enabled BEFORE the FIFO CCCD. If you reverse the order, the server may
+ * send its initial credit grant before we are subscribed and the link
+ * will appear connected but stalled with zero credits.
  */
 int sps_enable_notifications(sps_client_t *ctx) {
     // CCCD value to enable notifications (Little-endian 0x0001)
     uint16_t cccd_enable = 0x0001;
     int rc;
     
-    // Enable notifications on FIFO - CRITICAL!
-    // Without this, we won't receive data from server
-    rc = gatt_write_with_response(ctx->fifo_cccd_handle, 
+    // Enable notifications on Credits FIRST (flow-control channel)
+    rc = gatt_write_with_response(ctx->credits_cccd_handle, 
                                    (uint8_t *)&cccd_enable, 2);
     if (rc != 0) {
         return rc;
     }
     
-    // Enable notifications on Credits
-    // Without this, we won't know when we can send
-    rc = gatt_write_with_response(ctx->credits_cccd_handle, 
+    // Then enable notifications on FIFO (data channel)
+    rc = gatt_write_with_response(ctx->fifo_cccd_handle, 
                                    (uint8_t *)&cccd_enable, 2);
     if (rc != 0) {
         return rc;

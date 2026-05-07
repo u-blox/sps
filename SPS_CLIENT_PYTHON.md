@@ -163,9 +163,13 @@ class SPSClient:
         
         Steps performed:
         1. Establish BLE connection
-        2. Enable notifications on FIFO (to receive data)
-        3. Enable notifications on Credits (to receive flow control)
+        2. Enable notifications on Credits (FIRST — flow control channel)
+        3. Enable notifications on FIFO (data channel)
         4. Wait for server to grant initial credits
+        
+        The CCCD order matters: per UBX-16011192 Figure 5, Credits must
+        be subscribed before FIFO. Reversing the order risks losing the
+        server's first credit grant and leaving the link stalled.
         
         Args:
             address: Bluetooth address of the server (e.g., "AA:BB:CC:DD:EE:FF")
@@ -175,9 +179,9 @@ class SPSClient:
         print(f"Connected to SPS server: {address}")
         
         # Enable notifications - CRITICAL!
-        # Without this, we won't receive any data or credits from the server
-        await self.client.start_notify(SPS_FIFO_UUID, self.handle_fifo_notification)
+        # Order is mandatory: Credits CCCD first, then FIFO CCCD.
         await self.client.start_notify(SPS_CREDITS_UUID, self.handle_credits_notification)
+        await self.client.start_notify(SPS_FIFO_UUID, self.handle_fifo_notification)
         print("Notifications enabled, waiting for initial credits...")
         
         # Wait for server to send initial credits (with timeout)
