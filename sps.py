@@ -158,6 +158,7 @@ class SPSClient:
         self.tx_credits = 0
         self._rx_credits_pending = 0
         self._credits_event = asyncio.Event()
+        self._use_flow_control = True  # set by connect()
         
         # Buffers
         self._rx_buffer = bytearray()
@@ -201,7 +202,9 @@ class SPSClient:
         if self.on_data:
             self.on_data(bytes(data))
         
-        # Grant credits back
+        # Grant credits back (only when flow control is enabled)
+        if not self._use_flow_control:
+            return
         self._rx_credits_pending += 1
         if self._rx_credits_pending >= CREDIT_THRESHOLD:
             asyncio.create_task(self._grant_credits(self._rx_credits_pending))
@@ -219,7 +222,8 @@ class SPSClient:
             if self._state == SPSState.CONNECTED:
                 self.state = SPSState.READY
     
-    async def connect(self, address: str, timeout: float = 10.0) -> bool:
+    async def connect(self, address: str, timeout: float = 10.0,
+                      use_flow_control: bool = True) -> bool:
         """
         Connect to an SPS peripheral.
         
@@ -232,9 +236,18 @@ class SPSClient:
           5. Write Credits Value (grant initial credits to peripheral)
           6. Wait for peripheral to notify Credits Value back
         
+        The CCCD order is mandatory: subscribing to FIFO before Credits
+        risks the server sending its initial credit grant before we are
+        listening, which on NORA-W36 firmware results in the link being
+        torn down with a +UESPSD URC.
+        
         Args:
             address: Bluetooth address (e.g., "AA:BB:CC:DD:EE:FF")
             timeout: Connection timeout in seconds
+            use_flow_control: If False, skip the credit handshake entirely
+                and only enable FIFO notifications. The peer must also be
+                configured without flow control (on u-blox modules:
+                ``AT+UDSC`` parameter 4 = 0). There is no auto-negotiation.
             
         Returns:
             True if connected successfully
@@ -244,8 +257,10 @@ class SPSClient:
         """
         from bleak import BleakClient
         
+        self._use_flow_control = use_flow_control
         self.state = SPSState.CONNECTING
         self._disconnected_event = asyncio.Event()
+        self._credits_event = asyncio.Event()
         
         def _on_disconnect(client):
             self._disconnected_event.set()
@@ -256,18 +271,41 @@ class SPSClient:
             await self._client.connect(timeout=timeout)
             self.state = SPSState.CONNECTED
             
-            # Per SPS spec: enable Credits CCCD first, then FIFO CCCD
+            if not use_flow_control:
+                # Flow-control-disabled path: only FIFO notifications.
+                # Do NOT subscribe to Credits CCCD — the server is not
+                # expected to send any, and on some firmware enabling the
+                # CCCD with FC off will trigger a protocol violation.
+                await self._client.start_notify(SPS_FIFO_UUID, self._handle_fifo_notification)
+                self.state = SPSState.READY
+                return True
+            
+            # Per SPS spec (UBX-16011192 Figure 5): enable Credits CCCD
+            # FIRST, then FIFO CCCD. Reversing this order risks losing the
+            # server's initial credit notification.
             await self._client.start_notify(SPS_CREDITS_UUID, self._handle_credits_notification)
             await self._client.start_notify(SPS_FIFO_UUID, self._handle_fifo_notification)
             
             # Grant initial credits to peripheral (tells it we can receive data)
             await self._grant_credits(INITIAL_CREDITS)
             
-            # Wait for peripheral to send us credits (so we can send data)
+            # Wait for peripheral to send us credits (so we can send data).
+            # If the first attempt times out, re-grant credits and try once
+            # more — BLE pairing/bonding can race with our first write and
+            # cause the server to miss it.
             try:
                 await asyncio.wait_for(self._credits_event.wait(), timeout=3.0)
             except asyncio.TimeoutError:
-                pass  # Some peripherals don't send initial credits
+                if self._disconnected_event.is_set() or not self._client.is_connected:
+                    self.state = SPSState.DISCONNECTED
+                    raise ConnectionError("BLE link dropped during SPS handshake")
+                # Retry once — nudge the server to grant credits back.
+                self._credits_event.clear()
+                await self._grant_credits(INITIAL_CREDITS)
+                try:
+                    await asyncio.wait_for(self._credits_event.wait(), timeout=3.0)
+                except asyncio.TimeoutError:
+                    pass  # Some peripherals legitimately don't grant initial credits
             
             # Check if connection survived the handshake
             if self._disconnected_event.is_set() or not self._client.is_connected:
@@ -323,8 +361,8 @@ class SPSClient:
         offset = 0
         
         while offset < len(data):
-            # Wait for credits
-            if self.tx_credits <= 0:
+            # Wait for credits (skipped when flow control is disabled)
+            if self._use_flow_control and self.tx_credits <= 0:
                 self._credits_event.clear()
                 try:
                     await asyncio.wait_for(self._credits_event.wait(), timeout)
@@ -336,7 +374,8 @@ class SPSClient:
             chunk = data[offset:offset + chunk_size]
             
             await self._client.write_gatt_char(SPS_FIFO_UUID, chunk, response=False)
-            self.tx_credits -= 1
+            if self._use_flow_control:
+                self.tx_credits -= 1
             self.stats.bytes_sent += len(chunk)
             self.stats.packets_sent += 1
             
@@ -463,6 +502,8 @@ class SPSPeripheral:
         # Flow control
         self.tx_credits = 0
         self._rx_credits_pending = 0
+        self._use_flow_control = True  # set by start()
+        self._initial_credits_granted = False
         
         # Buffers
         self._rx_buffer = bytearray()
@@ -500,7 +541,15 @@ class SPSPeripheral:
         if self.on_data:
             self.on_data(bytes(value))
         
-        # Grant credits back
+        # Grant credits back (only when flow control is enabled).
+        # Also use the first FIFO write as a fallback signal that the
+        # client is ready, in case our initial-credits grant was sent
+        # before the client subscribed and was therefore lost.
+        if not self._use_flow_control:
+            return
+        if not self._initial_credits_granted:
+            self._initial_credits_granted = True
+            asyncio.create_task(self._grant_credits(INITIAL_CREDITS))
         self._rx_credits_pending += 1
         if self._rx_credits_pending >= CREDIT_THRESHOLD:
             asyncio.create_task(self._grant_credits(self._rx_credits_pending))
@@ -508,10 +557,20 @@ class SPSPeripheral:
     
     def _on_credits_write(self, characteristic, value: bytes):
         """Handle credits granted by client."""
+        if not self._use_flow_control:
+            return  # Ignore stray credit writes when FC is disabled
         if len(value) > 0:
             credits = value[0]
             self.tx_credits += credits
             self.stats.credits_received += credits
+            
+            # Fallback: if our scheduled initial-credit grant was sent
+            # before the client had subscribed (and therefore dropped
+            # by the BLE stack), do it now — the client writing credits
+            # means it is fully ready and expects credits back.
+            if not self._initial_credits_granted:
+                self._initial_credits_granted = True
+                asyncio.create_task(self._grant_credits(INITIAL_CREDITS))
             
             # Transition to READY and flush buffer
             if self._state == SPSState.CONNECTED:
@@ -541,23 +600,36 @@ class SPSPeripheral:
                 pass
     
     async def _delayed_initial_credits(self):
-        """Grant initial credits after connection."""
+        """Grant initial credits after connection.
+        
+        Note: bless doesn't reliably expose CCCD-subscribe events across
+        platforms, so we schedule a delayed grant. If this fires before
+        the client has subscribed to the Credits CCCD, the notification
+        will be silently dropped — in that case the fallback paths in
+        ``_on_fifo_write`` and ``_on_credits_write`` will grant credits
+        on the client's first interaction.
+        """
         await asyncio.sleep(0.5)
+        if self._initial_credits_granted:
+            return
+        self._initial_credits_granted = True
         await self._grant_credits(INITIAL_CREDITS)
     
     async def _flush_tx_buffer(self):
-        """Send pending data if credits available."""
+        """Send pending data if credits available (or always when FC off)."""
         if not self._server or self._state < SPSState.READY:
             return
         
-        while self.tx_credits > 0 and len(self._tx_buffer) > 0:
+        fc_off = not self._use_flow_control
+        while (fc_off or self.tx_credits > 0) and len(self._tx_buffer) > 0:
             chunk_size = min(self._packet_size, len(self._tx_buffer))
             chunk = bytes(self._tx_buffer[:chunk_size])
             del self._tx_buffer[:chunk_size]
             
             try:
                 await self._server.update_value(SPS_SERVICE_UUID, SPS_FIFO_UUID, chunk)
-                self.tx_credits -= 1
+                if not fc_off:
+                    self.tx_credits -= 1
                 self.stats.bytes_sent += len(chunk)
                 self.stats.packets_sent += 1
             except Exception:
@@ -565,12 +637,17 @@ class SPSPeripheral:
                 self._tx_buffer = bytearray(chunk) + self._tx_buffer
                 break
     
-    async def start(self, name: str = "SPS-Peripheral"):
+    async def start(self, name: str = "SPS-Peripheral",
+                    use_flow_control: bool = True):
         """
         Start advertising as SPS peripheral.
         
         Args:
             name: Device name to advertise
+            use_flow_control: If False, run without the credit handshake.
+                The connecting client must also be configured without flow
+                control. There is no auto-negotiation. On u-blox modules
+                this corresponds to ``AT+UDSC`` parameter 4 = 0.
         """
         from bless import (
             BlessServer,
@@ -578,6 +655,8 @@ class SPSPeripheral:
             GATTAttributePermissions
         )
         
+        self._use_flow_control = use_flow_control
+        self._initial_credits_granted = False
         self._server = BlessServer(name=name)
         self._server.write_request_func = self._handle_write
         self._server.read_request_func = self._handle_read
@@ -610,8 +689,13 @@ class SPSPeripheral:
         await self._server.start()
         self._state = SPSState.CONNECTED
         
-        # Grant initial credits
-        asyncio.create_task(self._delayed_initial_credits())
+        if use_flow_control:
+            # Grant initial credits (best-effort: see _delayed_initial_credits
+            # for the fallback path when the client subscribes after we send).
+            asyncio.create_task(self._delayed_initial_credits())
+        else:
+            # No credit handshake \u2014 we are immediately ready to send.
+            self._state = SPSState.READY
         
         if self.on_connect:
             self.on_connect()
@@ -846,7 +930,8 @@ async def cmd_client(args):
     
     print(f"Connecting to {args.address}...")
     try:
-        await client.connect(args.address, timeout=args.timeout)
+        await client.connect(args.address, timeout=args.timeout,
+                             use_flow_control=getattr(args, "flow_control", True))
         print(f"Connected! State: {client.state.name}, Credits: {client.tx_credits}")
         
         if args.interactive:
@@ -871,7 +956,8 @@ async def cmd_server(args):
     
     print(f"Starting SPS peripheral '{args.name}'...")
     try:
-        await peripheral.start(args.name)
+        await peripheral.start(args.name,
+                               use_flow_control=getattr(args, "flow_control", True))
         print(f"Advertising as '{args.name}'")
         print(f"Service UUID: {SPS_SERVICE_UUID}")
         
@@ -921,6 +1007,11 @@ SPS UUIDs:
                           help="Bluetooth address (e.g., AA:BB:CC:DD:EE:FF)")
     client_p.add_argument("-t", "--timeout", type=float, default=10.0,
                           help="Connection timeout (default: 10s)")
+    client_p.add_argument("--no-flow-control", dest="flow_control",
+                          action="store_false",
+                          help="Skip the credit handshake. Peer must also be "
+                               "configured without flow control (AT+UDSC "
+                               "parameter 4 = 0 on u-blox modules).")
     client_p.add_argument("--no-interactive", dest="interactive",
                           action="store_false", help="Disable interactive mode")
     
@@ -928,6 +1019,10 @@ SPS UUIDs:
     server_p = subparsers.add_parser("server", help="Run as SPS peripheral (advertiser)")
     server_p.add_argument("-n", "--name", default="SPS-Peripheral",
                           help="Device name to advertise (default: SPS-Peripheral)")
+    server_p.add_argument("--no-flow-control", dest="flow_control",
+                          action="store_false",
+                          help="Run without the credit handshake. Connecting "
+                               "client must also disable flow control.")
     server_p.add_argument("--no-interactive", dest="interactive",
                           action="store_false", help="Disable interactive mode")
     
@@ -935,6 +1030,9 @@ SPS UUIDs:
     peripheral_p = subparsers.add_parser("peripheral", help="Alias for 'server'")
     peripheral_p.add_argument("-n", "--name", default="SPS-Peripheral",
                               help="Device name to advertise")
+    peripheral_p.add_argument("--no-flow-control", dest="flow_control",
+                              action="store_false",
+                              help="Run without the credit handshake.")
     peripheral_p.add_argument("--no-interactive", dest="interactive",
                               action="store_false", help="Disable interactive mode")
     
