@@ -1,6 +1,6 @@
 # SPS server in C
 
-[sps.h](sps.h) and [sps.c](sps.c) implement the SPS credit-based flow control for the server role (BLE peripheral) in portable C11: no BLE stack, heap, stdio or globals. They are the C counterpart of `SPSPeripheral` in [sps.py](sps.py). The same code also implements the client role, see [SPS_CLIENT_C.md](SPS_CLIENT_C.md) for the files, the build and the test.
+[c/sps.h](c/sps.h) and [c/sps.c](c/sps.c) implement the SPS credit-based flow control for the server role (BLE peripheral) in portable C11: no BLE stack, heap, stdio or globals. They are the C counterpart of `SPSPeripheral` in [python/sps.py](python/sps.py). The same code also implements the client role, see [SPS_CLIENT_C.md](SPS_CLIENT_C.md) for the files, the build and the test.
 
 Related documentation: [SPS_PROTOCOL.md](SPS_PROTOCOL.md), [SPS_UBLOX_CONFIG.md](SPS_UBLOX_CONFIG.md), [Python server](SPS_SERVER_PYTHON.md).
 
