@@ -35,6 +35,7 @@ Note that following older geneation u-blox module also support SPS, but with ano
 | [SPS_SERVER_C.md](SPS_SERVER_C.md) | C SPS Server: how to connect [sps.c](sps.c) to a BLE stack, with an example |
 | [sps.py](sps.py) | Python library and command line tool (client and server) |
 | [sps.h](sps.h), [sps.c](sps.c), [test_sps.c](test_sps.c) | Portable C implementation of both roles, no BLE stack needed, and its host test |
+| [SPS_CSHARP.md](SPS_CSHARP.md) | C# SPS: how to connect [csharp/Sps.cs](csharp/Sps.cs) (both roles, `netstandard2.0`) to a BLE API, with a host test in [csharp/Sps.Tests](csharp/Sps.Tests) |
 | [SPS_UBLOX_CONFIG.md](SPS_UBLOX_CONFIG.md) | Configuring u-blox modules - AT commands, ucxclient API, transparent mode |
 
 ## Quick Start
@@ -45,6 +46,7 @@ Note that following older geneation u-blox module also support SPS, but with ano
 2. Choose your language:
    - Python: [SPS_CLIENT_PYTHON.md](SPS_CLIENT_PYTHON.md)
    - C/Embedded: [SPS_CLIENT_C.md](SPS_CLIENT_C.md)
+   - C# / .NET: [SPS_CSHARP.md](SPS_CSHARP.md)
 
 ### If you're building a server (hosting SPS service):
 
@@ -52,6 +54,7 @@ Note that following older geneation u-blox module also support SPS, but with ano
 2. Choose your language:
    - Python: [SPS_SERVER_PYTHON.md](SPS_SERVER_PYTHON.md)
    - C/Embedded: [SPS_SERVER_C.md](SPS_SERVER_C.md)
+   - C# / .NET: [SPS_CSHARP.md](SPS_CSHARP.md)
 
 ### If you're configuring u-blox modules:
 
@@ -81,9 +84,11 @@ The version tracks the latest u-connectXpress release that the documentation and
 | [`VERSION`](VERSION) | Source of truth, plain-text version string |
 | [`sps.py`](sps.py) | `__version__ = "X.Y.Z"`, printed by `python sps.py --version` |
 | [`sps.h`](sps.h) | `#define SPS_VERSION "X.Y.Z"` |
+| [`csharp/Sps.cs`](csharp/Sps.cs) | `public const string Version = "X.Y.Z"` |
 
 | Version | Date | Changes |
 |---------|------|---------|
+| unreleased | 2026-10-19 | New C# implementation `csharp/Sps.cs` for both roles behind a small transport interface, with a host test. |
 | 3.5.0 | 2026-10-19 | Version aligned with u-connectXpress 3.5.0 (`VERSION`, `--version`). New portable C implementation `sps.c`/`sps.h` for both roles with a host test; the C documents describe how to use it instead of embedding a listing. Corrected the UUID byte order for C code. Removed unused import in `sps.py`. |
 | 1.3 | 2026-01-22 | Split into multiple files for easier navigation |
 | 1.2 | 2026-01-22 | Added NORA-B27 support, generalized module references |
