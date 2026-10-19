@@ -72,8 +72,16 @@ Credits:  2456e1b9-26e2-8f83-e744-f34f01e9d704  (flow control)
 
 ## Version History
 
+The version tracks the latest u-connectXpress release that the documentation and `sps.py` have been checked against. It is kept in lock-step in these places, and releases are tagged `X.Y.Z` (no `v` prefix):
+
+| Where | What |
+|-------|------|
+| [`VERSION`](VERSION) | Source of truth, plain-text version string |
+| [`sps.py`](sps.py) | `__version__ = "X.Y.Z"`, printed by `python sps.py --version` |
+
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.5.0 | 2026-10-19 | Version aligned with u-connectXpress 3.5.0 (`VERSION`, `--version`). C examples compile: added forward declarations, `stdio.h` and the missing platform stubs. Removed unused import in `sps.py`. |
 | 1.3 | 2026-01-22 | Split into multiple files for easier navigation |
 | 1.2 | 2026-01-22 | Added NORA-B27 support, generalized module references |
 | 1.1 | 2026-01-21 | Added Serial Cable Replacement chapter |

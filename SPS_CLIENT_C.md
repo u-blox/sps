@@ -56,6 +56,7 @@ Replace the generic `gatt_write()`, `gatt_notify()` functions with your stack's 
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdio.h>
 
 /* ============================================================================
  * SPS UUIDs (128-bit, Bluetooth byte order - Little Endian)
@@ -139,6 +140,19 @@ extern int ble_connect(const uint8_t *address, uint8_t address_type);
 
 // Discover services
 extern int ble_discover_services(uint16_t conn_handle);
+
+// Initialize BLE stack
+extern int ble_init(void);
+
+// Delay function
+extern void delay_ms(uint32_t ms);
+
+/* ============================================================================
+ * Forward declarations
+ * ============================================================================ */
+
+void sps_flush_tx_buffer(sps_client_t *ctx);
+void sps_grant_credits(sps_client_t *ctx, uint8_t count);
 
 /* ============================================================================
  * SPS Client Implementation
