@@ -1,17 +1,17 @@
 # SPS client in C
 
-[sps.h](sps.h) and [sps.c](sps.c) implement the SPS credit-based flow control for the client role (BLE central) in portable C11: no BLE stack, heap, stdio or globals. They are the C counterpart of `SPSClient` in [sps.py](sps.py). The same code also implements the server role, see [SPS_SERVER_C.md](SPS_SERVER_C.md).
+[c/sps.h](c/sps.h) and [c/sps.c](c/sps.c) implement the SPS credit-based flow control for the client role (BLE central) in portable C11: no BLE stack, heap, stdio or globals. They are the C counterpart of `SPSClient` in [python/sps.py](python/sps.py). The same code also implements the server role, see [SPS_SERVER_C.md](SPS_SERVER_C.md).
 
 | File | Content |
 |------|---------|
-| [sps.h](sps.h) | API, constants and the 128-bit UUIDs in Bluetooth byte order |
-| [sps.c](sps.c) | Implementation of both roles |
-| [test_sps.c](test_sps.c) | Host test with a client and a server wired together in memory |
+| [c/sps.h](c/sps.h) | API, constants and the 128-bit UUIDs in Bluetooth byte order |
+| [c/sps.c](c/sps.c) | Implementation of both roles |
+| [c/test_sps.c](c/test_sps.c) | Host test with a client and a server wired together in memory |
 
-Build and test on a PC:
+Build and test on a PC, from the repository root:
 
 ```bash
-gcc -std=c11 -Wall -Wextra -Wpedantic -Werror sps.c test_sps.c -o test_sps && ./test_sps
+gcc -std=c11 -Wall -Wextra -Wpedantic -Werror c/sps.c c/test_sps.c -I c -o test_sps && ./test_sps
 ```
 
 Related documentation: [SPS_PROTOCOL.md](SPS_PROTOCOL.md), [SPS_UBLOX_CONFIG.md](SPS_UBLOX_CONFIG.md), [Python client](SPS_CLIENT_PYTHON.md).

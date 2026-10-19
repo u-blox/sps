@@ -733,7 +733,7 @@ Credits:  2456e1b9-26e2-8f83-e744-f34f01e9d704
 
 ### UUIDs in Little-Endian Byte Order (for C code)
 
-The bytes of the UUID string in reverse order, as NimBLE, Zephyr, the Nordic SoftDevice and the air interface use them. The same arrays are in [sps.h](sps.h) and are verified by [test_sps.c](test_sps.c). Windows GUID structures use a different byte order.
+The bytes of the UUID string in reverse order, as NimBLE, Zephyr, the Nordic SoftDevice and the air interface use them. The same arrays are in [c/sps.h](c/sps.h) and are verified by [c/test_sps.c](c/test_sps.c). Windows GUID structures use a different byte order.
 
 ```c
 // Service UUID
