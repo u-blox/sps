@@ -170,6 +170,13 @@ extern void delay_ms(uint32_t ms);
 extern void process_rx_data(uint8_t *data, uint16_t len);
 
 /* ============================================================================
+ * Forward declarations
+ * ============================================================================ */
+
+void sps_grant_credits_to_client(sps_server_t *ctx, uint8_t count);
+void sps_flush_tx_buffer(sps_server_t *ctx);
+
+/* ============================================================================
  * SPS Server Implementation
  * ============================================================================ */
 

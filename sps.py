@@ -45,6 +45,7 @@ USAGE:
     python sps.py scan                           # Scan for BLE devices
     python sps.py client -a AA:BB:CC:DD:EE:FF    # Connect as client
     python sps.py server -n "My-Device"          # Run as peripheral/server
+    python sps.py --version                      # Print tool version
 
 API DOCUMENTATION:
     See SPSClient and SPSPeripheral class docstrings below.
@@ -58,9 +59,14 @@ sys.dont_write_bytecode = True  # Prevent __pycache__ creation
 
 import asyncio
 import argparse
-from typing import Optional, Callable, List, Tuple
+from typing import Optional, Callable, List
 from dataclasses import dataclass
 from enum import IntEnum
+
+# Tool version. Kept in sync with the u-connectXpress user guide and the
+# latest u-blox module firmware release that this tool has been validated
+# against. The VERSION file holds the same value.
+__version__ = "3.5.0"
 
 # =============================================================================
 # SPS Protocol Constants
@@ -991,7 +997,9 @@ SPS UUIDs:
   Credits:  2456e1b9-26e2-8f83-e744-f34f01e9d704
         """
     )
-    
+
+    parser.add_argument("-v", "--version", action="version",
+                        version=f"sps {__version__}")
     subparsers = parser.add_subparsers(dest="command", help="Command")
     
     # Scan
